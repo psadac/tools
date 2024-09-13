@@ -23,20 +23,22 @@ type Golden struct {
 	name        string
 	trimPrefix  string
 	lineComment bool
+	bitmask     bool
 	input       string // input; the package clause is provided when running the test.
 	output      string // expected output.
 }
 
 var golden = []Golden{
-	{"day", "", false, day_in, day_out},
-	{"offset", "", false, offset_in, offset_out},
-	{"gap", "", false, gap_in, gap_out},
-	{"num", "", false, num_in, num_out},
-	{"unum", "", false, unum_in, unum_out},
-	{"unumpos", "", false, unumpos_in, unumpos_out},
-	{"prime", "", false, prime_in, prime_out},
-	{"prefix", "Type", false, prefix_in, prefix_out},
-	{"tokens", "", true, tokens_in, tokens_out},
+	{name: "day", trimPrefix: "", lineComment: false, bitmask: false, input: day_in, output: day_out},
+	{name: "offset", trimPrefix: "", lineComment: false, bitmask: false, input: offset_in, output: offset_out},
+	{name: "gap", trimPrefix: "", lineComment: false, bitmask: false, input: gap_in, output: gap_out},
+	{name: "num", trimPrefix: "", lineComment: false, bitmask: false, input: num_in, output: num_out},
+	{name: "unum", trimPrefix: "", lineComment: false, bitmask: false, input: unum_in, output: unum_out},
+	{name: "unumpos", trimPrefix: "", lineComment: false, bitmask: false, input: unumpos_in, output: unumpos_out},
+	{name: "prime", trimPrefix: "", lineComment: false, bitmask: false, input: prime_in, output: prime_out},
+	{name: "prefix", trimPrefix: "Type", lineComment: false, bitmask: false, input: prefix_in, output: prefix_out},
+	{name: "tokens", trimPrefix: "", lineComment: true, bitmask: false, input: tokens_in, output: tokens_out},
+	{name: "bitmask", trimPrefix: "", lineComment: false, bitmask: true, input: bitmask_in, output: bitmask_out},
 }
 
 // Each example starts with "type XXX [u]int", with a single space separating them.
@@ -448,6 +450,83 @@ func (i Token) String() string {
 }
 `
 
+// Type Flags is taken from "regexp/syntax"
+const bitmask_in = `type Flags uint16
+const (
+	FoldCase      Flags = 1 << iota // case-insensitive match
+	Literal                         // treat pattern as literal string
+	ClassNL                         // allow character classes like [^a-z] and [[:space:]] to match newline
+	DotNL                           // allow . to match newline
+	OneLine                         // treat ^ and $ as only matching at beginning and end of text
+	NonGreedy                       // make repetition operators default to non-greedy
+	PerlX                           // allow Perl extensions
+	UnicodeGroups                   // allow \p{Han}, \P{Han} for Unicode group and negation
+	WasDollar                       // regexp OpEndText was $, not \z
+	Simple                          // regexp contains no counted repetition
+
+	MatchNL = ClassNL | DotNL
+
+	Perl        = ClassNL | OneLine | PerlX | UnicodeGroups // as close to Perl as possible
+	POSIX Flags = 0                                         // POSIX syntax
+)
+`
+
+const bitmask_out = `func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[FoldCase-1]
+	_ = x[Literal-2]
+	_ = x[ClassNL-4]
+	_ = x[DotNL-8]
+	_ = x[OneLine-16]
+	_ = x[NonGreedy-32]
+	_ = x[PerlX-64]
+	_ = x[UnicodeGroups-128]
+	_ = x[WasDollar-256]
+	_ = x[Simple-512]
+	_ = x[POSIX-0]
+}
+
+const _Flags_name = "POSIXFoldCaseLiteralClassNLDotNLOneLineNonGreedyPerlXUnicodeGroupsWasDollarSimple"
+
+var _Flags_map = map[Flags]string{
+	0:   _Flags_name[0:5],
+	1:   _Flags_name[5:13],
+	2:   _Flags_name[13:20],
+	4:   _Flags_name[20:27],
+	8:   _Flags_name[27:32],
+	16:  _Flags_name[32:39],
+	32:  _Flags_name[39:48],
+	64:  _Flags_name[48:53],
+	128: _Flags_name[53:66],
+	256: _Flags_name[66:75],
+	512: _Flags_name[75:81],
+}
+
+func (i Flags) String() string {
+	if i <= 0 {
+		return "Flags()"
+	}
+	sb := make([]byte, 0, len(_Flags_name)/2)
+	sb = append(sb, []byte("Flags(")...)
+	for mask := Flags(1); mask > 0 && mask <= i; mask <<= 1 {
+		val := i & mask
+		if val == 0 {
+			continue
+		}
+		str, ok := _Flags_map[val]
+		if !ok {
+			str = "0x" + strconv.FormatUint(uint64(val), 16)
+		}
+		sb = append(sb, []byte(str)...)
+		sb = append(sb, '|')
+	}
+	sb[len(sb)-1] = ')'
+	return string(sb)
+}
+`
+
 func TestGolden(t *testing.T) {
 	testenv.NeedsTool(t, "go")
 
@@ -458,6 +537,7 @@ func TestGolden(t *testing.T) {
 			g := Generator{
 				trimPrefix:  test.trimPrefix,
 				lineComment: test.lineComment,
+				bitmask:     test.bitmask,
 				logf:        t.Logf,
 			}
 			input := "package test\n" + test.input
